@@ -3,6 +3,7 @@
 __pycache__/
 *.db
 .pytest_cache/
-.ruff_cache/*.egg-info/
-Phases
+.ruff_cache/
+*.egg-info/
+Phases/
 scratch_check*.py
