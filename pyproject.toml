@@ -1,0 +1,22 @@
+[project]
+name = "invest-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "langgraph", "langchain", "langchain-mcp-adapters", "mcp",
+  "fastapi", "uvicorn", "pydantic>=2", "pydantic-settings",
+  "yfinance", "pandas", "numpy", "feedparser", "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "pre-commit"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
