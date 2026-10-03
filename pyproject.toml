@@ -3,9 +3,19 @@ name = "invest-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-  "langgraph", "langchain", "langchain-mcp-adapters", "mcp",
-  "fastapi", "uvicorn", "pydantic>=2", "pydantic-settings",
-  "yfinance", "pandas", "numpy", "feedparser", "httpx",
+  "langgraph",
+  "langchain",
+  "langchain-mcp-adapters",
+  "mcp[cli]",
+  "fastapi",
+  "uvicorn",
+  "pydantic>=2",
+  "pydantic-settings",
+  "yfinance",
+  "pandas",
+  "numpy",
+  "feedparser",
+  "httpx",
 ]
 
 [project.optional-dependencies]
