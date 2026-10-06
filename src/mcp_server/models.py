@@ -71,3 +71,25 @@ class NewsResult(BaseModel):
     as_of: datetime
     source: str = "rss"
     untrusted: bool = True
+
+
+class Holding(BaseModel):
+    symbol: str
+    quantity: int
+    avg_cost: float
+    last_price: float | None = None
+    market_value: float | None = None
+    unrealized_pnl: float | None = None
+    weight_pct: float | None = None  # share of total equity
+
+
+class Portfolio(BaseModel):
+    mode: str = "paper"
+    cash: float
+    holdings: list[Holding]
+    cost_basis: float
+    market_value: float | None  # holdings only; None if any price is missing
+    total_equity: float | None  # cash + holdings; None if any price is missing
+    valuation_complete: bool
+    as_of: datetime
+    source: str = "paper_portfolio"

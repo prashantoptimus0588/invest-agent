@@ -3,10 +3,11 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from .models import ToolError
+from .models import Portfolio, ToolError, utcnow
 from .providers.news import RssNewsProvider, render_untrusted
 from .providers.yfinance_provider import YFinanceProvider
 from .resilience import ResilientProvider, TTLCache
+from .store import PortfolioStore
 
 # stdout is reserved for the MCP protocol. Log to stderr only.
 logging.basicConfig(
@@ -19,6 +20,7 @@ mcp = FastMCP("market")
 _cache = TTLCache()
 market = ResilientProvider(YFinanceProvider(), cache=_cache)
 news = RssNewsProvider(cache=_cache)
+store = PortfolioStore()
 
 VALID_PERIODS = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"}
 VALID_INTERVALS = {"1d", "1wk", "1mo"}
@@ -99,6 +101,53 @@ def search_news(query: str, limit: int = 10) -> dict:
         "feeds_failed": result.feeds_failed,
         "content": render_untrusted(result),
     }
+
+
+@mcp.tool()
+def get_portfolio() -> dict:
+    """Current PAPER portfolio: cash, each holding (quantity, average cost, latest price,
+    market value, unrealized P&L, weight as a % of total equity) and totals.
+    If a live price is unavailable for any holding, that holding's price fields are null,
+    valuation_complete is false and the totals and weights are null: never treat a missing
+    price as zero. All amounts are in INR and this is simulated money."""
+    log.info("get_portfolio")
+    cash = store.get_cash()
+    holdings, complete = [], True
+    for h in store.get_holdings():
+        q = market.get_quote(h.symbol)
+        price = None if isinstance(q, ToolError) else q.price
+        if price is None:
+            complete = False
+            holdings.append(h)
+            continue
+        holdings.append(
+            h.model_copy(
+                update={
+                    "last_price": price,
+                    "market_value": round(price * h.quantity, 2),
+                    "unrealized_pnl": round((price - h.avg_cost) * h.quantity, 2),
+                }
+            )
+        )
+
+    mv = round(sum(h.market_value for h in holdings if h.market_value is not None), 2)
+    total = round(cash + mv, 2) if complete else None
+    if total:
+        holdings = [
+            h.model_copy(update={"weight_pct": round(h.market_value / total * 100, 2)})
+            for h in holdings
+        ]
+    return _out(
+        Portfolio(
+            cash=round(cash, 2),
+            holdings=holdings,
+            cost_basis=round(sum(h.avg_cost * h.quantity for h in holdings), 2),
+            market_value=mv if complete else None,
+            total_equity=total,
+            valuation_complete=complete,
+            as_of=utcnow(),
+        )
+    )
 
 
 if __name__ == "__main__":

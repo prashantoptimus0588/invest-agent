@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     trading_enabled: bool = True
     max_trade_inr: int = 5000
     daily_cap_inr: int = 15000
-    approval_secret: str = "change-me"
+    approval_secret: str = "xxxx"
 
 
 @lru_cache

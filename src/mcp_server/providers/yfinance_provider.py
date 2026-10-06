@@ -44,7 +44,13 @@ class YFinanceProvider(MarketDataProvider):
         if price is None:
             raise ProviderError("NO_DATA", f"No price for {sym}", retryable=True)
 
-        return Quote(symbol=sym, price=price, prev_close=prev, as_of=utcnow(), source=SOURCE)
+        return Quote(
+            symbol=sym,
+            price=round(price, 2),
+            prev_close=round(prev, 2) if prev is not None else None,
+            as_of=utcnow(),
+            source=SOURCE,
+        )
 
     def get_history(self, symbol: str, period: str = "1y", interval: str = "1d") -> History:
         sym = normalise_symbol(symbol)
@@ -55,10 +61,10 @@ class YFinanceProvider(MarketDataProvider):
         candles = [
             Candle(
                 date=idx.to_pydatetime(),
-                open=float(r.Open),
-                high=float(r.High),
-                low=float(r.Low),
-                close=float(r.Close),
+                open=round(float(r.Open), 2),
+                high=round(float(r.High), 2),
+                low=round(float(r.Low), 2),
+                close=round(float(r.Close), 2),
                 volume=int(r.Volume) if _clean(r.Volume) is not None else None,
             )
             for idx, r in df.iterrows()
