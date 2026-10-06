@@ -93,3 +93,22 @@ class Portfolio(BaseModel):
     valuation_complete: bool
     as_of: datetime
     source: str = "paper_portfolio"
+
+
+class OrderResult(BaseModel):
+    ok: bool
+    status: str  # FILLED | BLOCKED
+    mode: str = "paper"
+    order_id: str | None = None
+    idempotency_key: str | None = None
+    symbol: str | None = None
+    side: str | None = None
+    quantity: int | None = None
+    fill_price: float | None = None
+    notional: float | None = None
+    cash_after: float | None = None
+    block_code: str | None = None  # machine-readable reason the graph can branch on
+    message: str = ""
+    retryable: bool = False
+    idempotent_replay: bool = False
+    as_of: datetime

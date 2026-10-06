@@ -55,6 +55,12 @@ BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 """
 
 
+class OrderBlocked(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
 class PortfolioStore:
     def __init__(self, db_path: str | Path = DEFAULT_DB, starting_cash: float = STARTING_CASH):
         self.db_path = Path(db_path)
@@ -137,3 +143,121 @@ class PortfolioStore:
                     json.dumps(details, default=str) if details else None,
                 ),
             )
+
+    # ---- orders ------------------------------------------------------------
+    def get_order(self, order_id: str) -> dict | None:
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_order_by_key(self, key: str) -> dict | None:
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM orders WHERE idempotency_key = ?", (key,)).fetchone()
+        return dict(row) if row else None
+
+    def traded_today(self, day_start: str, day_end: str) -> float:
+        with self._conn() as c:
+            return float(
+                c.execute(
+                    "SELECT COALESCE(SUM(quantity * fill_price), 0) FROM orders "
+                    "WHERE status = 'FILLED' AND created_at >= ? AND created_at < ?",
+                    (day_start, day_end),
+                ).fetchone()[0]
+            )
+
+    def fill_order(
+        self,
+        *,
+        order_id: str,
+        key: str,
+        symbol: str,
+        side: str,
+        quantity: int,
+        limit_price: float,
+        fill_price: float,
+        daily_cap: float,
+        day_start: str,
+        day_end: str,
+    ) -> dict:
+        """Atomically re-check state-dependent limits, then apply the fill.
+        Raises OrderBlocked (and rolls back) if any check fails."""
+        notional = round(quantity * fill_price, 2)
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")  # one writer at a time
+            dup = c.execute("SELECT * FROM orders WHERE idempotency_key = ?", (key,)).fetchone()
+            cash = float(c.execute("SELECT cash FROM account WHERE id = 1").fetchone()["cash"])
+            if dup:
+                return {"replay": True, "order": dict(dup), "cash_after": cash}
+
+            spent = float(
+                c.execute(
+                    "SELECT COALESCE(SUM(quantity * fill_price), 0) FROM orders "
+                    "WHERE status = 'FILLED' AND created_at >= ? AND created_at < ?",
+                    (day_start, day_end),
+                ).fetchone()[0]
+            )
+            if spent + notional > daily_cap + 1e-9:
+                raise OrderBlocked(
+                    "DAILY_CAP",
+                    f"Daily cap Rs {daily_cap:,.2f} exceeded: traded Rs {spent:,.2f} "
+                    f"today, this order adds Rs {notional:,.2f}",
+                )
+
+            h = c.execute(
+                "SELECT quantity, avg_cost FROM holdings WHERE symbol = ?", (symbol,)
+            ).fetchone()
+            now = utcnow().isoformat()
+            if side == "BUY":
+                if notional > cash + 1e-9:
+                    raise OrderBlocked(
+                        "INSUFFICIENT_CASH", f"Need Rs {notional:,.2f}, cash is Rs {cash:,.2f}"
+                    )
+                if h:
+                    new_q = h["quantity"] + quantity
+                    new_avg = round((h["quantity"] * h["avg_cost"] + notional) / new_q, 4)
+                else:
+                    new_q, new_avg = quantity, round(fill_price, 4)
+                c.execute(
+                    "INSERT INTO holdings (symbol, quantity, avg_cost, updated_at) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET "
+                    "quantity = excluded.quantity, avg_cost = excluded.avg_cost, "
+                    "updated_at = excluded.updated_at",
+                    (symbol, new_q, new_avg, now),
+                )
+                cash -= notional
+            else:  # SELL: no shorting
+                if not h or h["quantity"] < quantity:
+                    have = h["quantity"] if h else 0
+                    raise OrderBlocked(
+                        "INSUFFICIENT_HOLDINGS", f"Cannot sell {quantity} {symbol}, holding {have}"
+                    )
+                remaining = h["quantity"] - quantity
+                if remaining == 0:
+                    c.execute("DELETE FROM holdings WHERE symbol = ?", (symbol,))
+                else:
+                    c.execute(
+                        "UPDATE holdings SET quantity = ?, updated_at = ? WHERE symbol = ?",
+                        (remaining, now, symbol),
+                    )
+                cash += notional
+
+            cash = round(cash, 2)
+            c.execute("UPDATE account SET cash = ?, updated_at = ? WHERE id = 1", (cash, now))
+            c.execute(
+                "INSERT INTO orders (order_id, idempotency_key, symbol, side, quantity, "
+                "limit_price, fill_price, status, reason, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'FILLED', NULL, ?)",
+                (order_id, key, symbol, side, quantity, limit_price, fill_price, now),
+            )
+            order = {
+                "order_id": order_id,
+                "idempotency_key": key,
+                "symbol": symbol,
+                "side": side,
+                "quantity": quantity,
+                "limit_price": limit_price,
+                "fill_price": fill_price,
+                "status": "FILLED",
+                "created_at": now,
+            }
+        return {"replay": False, "order": order, "cash_after": cash}

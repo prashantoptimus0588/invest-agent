@@ -3,6 +3,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
+from .broker import PaperBroker
 from .models import Portfolio, ToolError, utcnow
 from .providers.news import RssNewsProvider, render_untrusted
 from .providers.yfinance_provider import YFinanceProvider
@@ -21,6 +22,7 @@ _cache = TTLCache()
 market = ResilientProvider(YFinanceProvider(), cache=_cache)
 news = RssNewsProvider(cache=_cache)
 store = PortfolioStore()
+broker = PaperBroker(market, store)
 
 VALID_PERIODS = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"}
 VALID_INTERVALS = {"1d", "1wk", "1mo"}
@@ -148,6 +150,31 @@ def get_portfolio() -> dict:
             as_of=utcnow(),
         )
     )
+
+
+@mcp.tool()
+def place_paper_order(
+    symbol: str, side: str, quantity: int, limit_price: float, idempotency_key: str
+) -> dict:
+    """Place a PAPER (simulated) market order on an NSE stock. No real money moves.
+    side: BUY or SELL. quantity: whole shares. limit_price: the price you expect to pay or
+    receive; the order is blocked if the live price is outside the allowed band around it.
+    idempotency_key: 8-64 characters, unique per intended order. If a call times out, retry
+    with the SAME key: it can never create a second order.
+    The server enforces hard limits (kill switch, allowlist, NSE market hours, per-trade and
+    daily caps, price band, cash and holdings). A blocked order returns ok=false with a
+    machine-readable block_code. Do not try to get around a block by changing the key or
+    splitting the order; report the block to the user instead."""
+    log.info("place_paper_order %s %s %s", side, quantity, symbol)
+    return _out(broker.place_order(symbol, side, quantity, limit_price, idempotency_key))
+
+
+@mcp.tool()
+def get_order_status(order_id: str) -> dict:
+    """Look up a filled paper order by its order_id (for example 'ORD-1A2B3C4D5E6F').
+    Blocked attempts never create orders, so they will not be found here."""
+    log.info("get_order_status %s", order_id)
+    return _out(broker.get_order_status(order_id))
 
 
 if __name__ == "__main__":
