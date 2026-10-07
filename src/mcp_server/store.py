@@ -178,6 +178,7 @@ class PortfolioStore:
         daily_cap: float,
         day_start: str,
         day_end: str,
+        created_at: str | None = None,
     ) -> dict:
         """Atomically re-check state-dependent limits, then apply the fill.
         Raises OrderBlocked (and rolls back) if any check fails."""
@@ -206,7 +207,7 @@ class PortfolioStore:
             h = c.execute(
                 "SELECT quantity, avg_cost FROM holdings WHERE symbol = ?", (symbol,)
             ).fetchone()
-            now = utcnow().isoformat()
+            now = created_at or utcnow().isoformat()
             if side == "BUY":
                 if notional > cash + 1e-9:
                     raise OrderBlocked(

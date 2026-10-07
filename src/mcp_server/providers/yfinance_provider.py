@@ -31,7 +31,7 @@ class YFinanceProvider(MarketDataProvider):
             fi = t.fast_info
             price = _clean(fi["last_price"])
             prev = _clean(fi["previous_close"])
-        except (KeyError, TypeError, ValueError, AttributeError) as e:
+        except (KeyError, TypeError, ValueError, AttributeError, RuntimeError) as e:
             log.debug("fast_info unavailable for %s, falling back to history: %s", symbol, e)
 
         if price is None:
@@ -87,7 +87,7 @@ class YFinanceProvider(MarketDataProvider):
                 fi = t.fast_info
                 hi = hi if hi is not None else _clean(fi["year_high"])
                 lo = lo if lo is not None else _clean(fi["year_low"])
-            except (KeyError, TypeError, ValueError, AttributeError) as e:
+            except (KeyError, TypeError, ValueError, AttributeError, RuntimeError) as e:
                 log.debug("fast_info unavailable for %s, falling back to history: %s", symbol, e)
 
         de = _clean(info.get("debtToEquity"))

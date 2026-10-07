@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .broker import PaperBroker
 from .models import Portfolio, ToolError, utcnow
+from .providers.base import normalise_symbol
 from .providers.news import RssNewsProvider, render_untrusted
 from .providers.yfinance_provider import YFinanceProvider
 from .resilience import ResilientProvider, TTLCache
@@ -47,6 +48,7 @@ def get_quote(symbol: str) -> dict:
     """Latest price for an Indian (NSE) stock or index, e.g. 'RELIANCE', 'TCS' or '^NSEI'.
     Returns price, previous close, currency (INR), an as_of timestamp and the data source.
     Prices may be delayed. On failure returns ok=false with an error code."""
+    symbol = normalise_symbol(symbol)
     log.info("get_quote %s", symbol)
     return _out(market.get_quote(symbol))
 

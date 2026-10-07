@@ -237,6 +237,7 @@ class PaperBroker:
                 daily_cap=cfg.daily_cap_inr,
                 day_start=day_start,
                 day_end=day_end,
+                created_at=now.isoformat(),
             )
         except OrderBlocked as e:
             return self._block(e.code, e.message, req, **echo)
