@@ -76,7 +76,7 @@ class NewsResult(BaseModel):
 class Holding(BaseModel):
     symbol: str
     quantity: int
-    avg_cost: float
+    avg_cost: float | None = None  # <-- Changed this to allow None
     last_price: float | None = None
     market_value: float | None = None
     unrealized_pnl: float | None = None
