@@ -16,6 +16,7 @@ dependencies = [
   "numpy",
   "feedparser",
   "httpx",
+  "langchain-google-genai>=4.4.0",
 ]
 
 [project.optional-dependencies]
